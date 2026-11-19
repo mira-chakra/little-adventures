@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: little-adventures-capstone
+    runtime: node
+    plan: free
+    buildCommand: npm install --include=dev --prefix client && npm run build --prefix client && npm install --omit=dev --prefix server
+    startCommand: npm run start --prefix server
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22.16.0
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true

@@ -31,8 +31,13 @@ export async function forecasts(items,date=todayBeirut(),fetcher=fetch) {
   for(let i=0;i<batches.length;i+=4)await Promise.all(batches.slice(i,i+4).map(async batch=>{
     try{
       const query=new URLSearchParams({latitude:batch.map(x=>x.latitude).join(','),longitude:batch.map(x=>x.longitude).join(','),daily:'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max',timezone:'Asia/Beirut',forecast_days:'7'});
-      const response=await fetcher(`https://api.open-meteo.com/v1/forecast?${query}`,{signal:AbortSignal.timeout(5000)});
-      if(!response.ok)throw new Error('Forecast unavailable');
+      const response=await fetcher(`https://api.open-meteo.com/v1/forecast?${query}`,{signal:AbortSignal.timeout(12000)});
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(
+          `Open-Meteo HTTP ${response.status}: ${details.slice(0, 300)}`
+        );
+}
       const json=await response.json();const rows=Array.isArray(json)?json:[json];
       batch.forEach((place,index)=>{
         const daily=rows[index]?.daily;const day=daily?.time?.indexOf(date)??-1;if(day<0)return;
@@ -41,7 +46,9 @@ export async function forecasts(items,date=todayBeirut(),fetcher=fetch) {
         if(cache.size>=500)cache.delete(cache.keys().next().value);
         cache.set(place.key,{value,expires:Date.now()+30*60*1000});for(const id of place.ids)result.set(id,value);
       });
-    }catch{/* Weather is optional; unavailable is never represented as sunny or zero rain. */}
+    }catch(error){
+      console.error('Weather API error',error);
+    }
   }));
   return result;
 }

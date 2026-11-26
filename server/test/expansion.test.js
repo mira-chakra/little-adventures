@@ -32,14 +32,151 @@ test('distance is zero at same point and missing coordinates do not become zero'
   const r=rankAdventures([{...sample,latitude:null}],{budget:20,availableMinutes:120,mood:'culture',latitude:33.9,longitude:35.5});
   assert.equal(r[0].distanceKm,null);
 });
-test('weather batches locations and preserves missing weather values',async()=>{
-  let calls=0;
-  const fake=async url=>{calls++;assert.equal(new URL(url).hostname,'api.open-meteo.com');return {ok:true,json:async()=>[{daily:{time:[todayBeirut()],weather_code:[61],temperature_2m_max:[null],temperature_2m_min:[12],precipitation_probability_max:[80],wind_speed_10m_max:[15]}},{daily:{time:[todayBeirut()],weather_code:[0],temperature_2m_max:[24],temperature_2m_min:[14],precipitation_probability_max:[0],wind_speed_10m_max:[5]}}]};};
-  const values=await forecasts([{_id:'w1',latitude:34.1123,longitude:35.9876},{_id:'w2',latitude:33.2123,longitude:35.8876}],todayBeirut(),fake);
-  assert.equal(calls,1);assert.equal(values.get('w1').high,null);assert.equal(values.get('w2').rainChance,0);
-  const missing=await forecasts([{_id:'w3',latitude:32.1111,longitude:36.1111}],todayBeirut(),async()=>{throw new Error('offline');});
-  assert.equal(missing.size,0);
-  assert.equal(validForecastDate('2000-01-01'),false);
+
+test('weather batches locations and preserves missing weather values', async (t) => {
+
+  // Use a fake API key for automated testing
+  const previousKey = process.env.VISUAL_CROSSING_KEY;
+  process.env.VISUAL_CROSSING_KEY = 'test-api-key';
+
+  // Restore the original environment after the test
+  t.after(() => {
+    if (previousKey === undefined) {
+      delete process.env.VISUAL_CROSSING_KEY;
+    } else {
+      process.env.VISUAL_CROSSING_KEY = previousKey;
+    }
+  });
+
+  let calls = 0;
+  const requestedUrls = [];
+  const date = todayBeirut();
+
+  // Simulate the Visual Crossing API
+  const fake = async (url) => {
+    calls++;
+
+    const parsedUrl = new URL(url);
+    requestedUrls.push(parsedUrl);
+
+    const firstLocation =
+      parsedUrl.pathname.includes('34.1123,35.9876');
+
+    return {
+      ok: true,
+
+      json: async () => ({
+        days: [
+          {
+            datetime: date,
+            tempmax: firstLocation ? null : 24,
+            tempmin: firstLocation ? 12 : 14,
+            precipprob: firstLocation ? 80 : 0,
+            windspeed: firstLocation ? 15 : 5,
+            icon: firstLocation ? 'rain' : 'clear-day',
+            conditions: firstLocation ? 'Rain' : 'Clear'
+          }
+        ]
+      })
+    };
+  };
+
+  const values = await forecasts(
+    [
+      {
+        _id: 'w1',
+        latitude: 34.1123,
+        longitude: 35.9876
+      },
+      {
+        _id: 'w2',
+        latitude: 33.2123,
+        longitude: 35.8876
+      },
+      {
+        _id: 'w4',
+        latitude: 34.1123,
+        longitude: 35.9876
+      }
+    ],
+    date,
+    fake
+  );
+
+  // Two unique locations require two API calls
+  assert.equal(calls, 2);
+
+  // Verify the correct API provider and configuration
+  for (const url of requestedUrls) {
+    assert.equal(
+      url.hostname,
+      'weather.visualcrossing.com'
+    );
+
+    assert.equal(
+      url.searchParams.get('key'),
+      'test-api-key'
+    );
+
+    assert.equal(
+      url.searchParams.get('unitGroup'),
+      'metric'
+    );
+  }
+
+  assert.equal(values.size, 3);
+
+  // Verify missing and zero values are preserved
+  assert.equal(values.get('w1').high, null);
+  assert.equal(values.get('w2').rainChance, 0);
+
+  // Verify weather code conversion
+  assert.equal(values.get('w1').code, 61);
+  assert.equal(values.get('w2').code, 0);
+
+  // Verify duplicate locations share the same forecast
+  assert.deepEqual(values.get('w1'), values.get('w4'));
+
+  // Verify cached forecasts avoid extra API calls
+  const cached = await forecasts(
+    [
+      {
+        _id: 'w5',
+        latitude: 34.1123,
+        longitude: 35.9876
+      }
+    ],
+    date,
+    fake
+  );
+
+  assert.equal(calls, 2);
+  assert.deepEqual(cached.get('w5'), values.get('w1'));
+
+  // Verify behavior when the API is unavailable
+  let offlineCalls = 0;
+
+  const missing = await forecasts(
+    [
+      {
+        _id: 'w3',
+        latitude: 32.1111,
+        longitude: 36.1111
+      }
+    ],
+    date,
+    async () => {
+      offlineCalls++;
+      throw new Error('offline');
+    }
+  );
+
+  assert.equal(offlineCalls, 1);
+  assert.equal(missing.size, 0);
+
+  // Verify invalid forecast dates are rejected
+  assert.equal(validForecastDate('2000-01-01'), false);
+
 });
 test('guest cannot import or inspect private draft management endpoints',async()=>{
   assert.equal((await write(request(app).post('/api/adventures/import')).send({records:[sample],dryRun:false})).status,401);

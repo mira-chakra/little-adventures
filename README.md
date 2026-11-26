@@ -685,3 +685,26 @@ Developed as part of the Web Programming Final Capstone Project at Saint Joseph 
 Little Adventures provides a centralized and personalized platform for discovering activities across Lebanon.
 
 The project demonstrates full-stack development, database management, REST API integration, authentication, authorization, automated testing, security and cloud deployment.
+
+
+GitHub Repository:
+https://github.com/mira-chakra/little-adventures
+
+Live Frontend:
+https://little-adventures-frontenf.onrender.com/
+
+Live Backend API:
+https://little-adventures-1.onrender.com/
+
+API Health Check:
+https://little-adventures-1.onrender.com/api/health
+
+Automated Testing Results:
+
+Backend: 36/36 tests passed.
+
+Frontend: 14/14 tests passed.
+
+Total: 50/50 tests passed.
+
+Production build: successful.
